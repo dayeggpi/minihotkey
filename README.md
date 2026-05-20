@@ -2,7 +2,7 @@
 
 Lightweight Windows system tray app that shows a pill notification whenever you press a hotkey, so you remember what each key does.
 
-<img width="800" alt="image" src="https://raw.githubusercontent.com/dayeggpi/minihotkey/refs/heads/master/mhk.png">
+<img width="349" alt="image" src="https://raw.githubusercontent.com/dayeggpi/minihotkey/refs/heads/main/mhk.png">
 
 
 ## Features
