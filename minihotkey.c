@@ -60,6 +60,7 @@ static UINT        g_repeat_vk         = 0;
 static UINT        g_repeat_mods       = 0;
 static UINT        g_list_trigger_mods = MOD_CONTROL | MOD_SHIFT;
 static UINT        g_list_trigger_vk   = 'G';
+static UINT        WM_TASKBARCREATED   = 0;
 
 static const char* MAIN_CLASS = "MiniHotkeyMain";
 static const char* PILL_CLASS = "MiniHotkeyPill";
@@ -523,14 +524,8 @@ LRESULT CALLBACK PillWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
 
 // ---- Tray ----
 static void TrayInit(HWND hwnd) {
-    char ico_path[MAX_PATH];
-    GetModuleFileNameA(NULL, ico_path, MAX_PATH);
-    char* sl = strrchr(ico_path, '\\');
-    if (sl) strcpy(sl + 1, "minihotkey.ico");
-    else    strcpy(ico_path, "minihotkey.ico");
-
-    g_tray_icon = (HICON)LoadImageA(NULL, ico_path, IMAGE_ICON,
-                                    0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+    g_tray_icon = (HICON)LoadImageA(GetModuleHandleA(NULL), MAKEINTRESOURCEA(1),
+                                    IMAGE_ICON, 0, 0, LR_DEFAULTSIZE);
     if (!g_tray_icon) g_tray_icon = LoadIconA(NULL, IDI_APPLICATION);
 
     memset(&g_nid, 0, sizeof(g_nid));
@@ -550,6 +545,10 @@ static void TrayRemove(void) {
 
 // ---- Main window proc ----
 LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (WM_TASKBARCREATED && msg == WM_TASKBARCREATED) {
+        Shell_NotifyIconA(NIM_ADD, &g_nid);
+        return 0;
+    }
     switch (msg) {
     case WM_HOTKEY:
         if ((int)wParam == HOTKEY_LIST_ID) ShowListPill();
@@ -646,6 +645,7 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmd, int nShow) {
         NULL, NULL, hInst, NULL);
 
     TrayInit(g_main_wnd);
+    WM_TASKBARCREATED = RegisterWindowMessageA("TaskbarCreated");
     RegisterAllHotkeys(g_main_wnd);
     g_kb_hook = SetWindowsHookExA(WH_KEYBOARD_LL, LowLevelKeyboardProc, hInst, 0);
 
