@@ -9,17 +9,25 @@ Lightweight Windows system tray app that shows a pill notification whenever you 
 
 - Pill overlay in bottom-right corner on hotkey press, auto-dismisses after 2.5s
 - `Ctrl+Shift+G` opens a scrollable shortlist of all configured hotkeys
-- Configurable via `config.ini` — no restart needed, use tray → **Reload config**
+- Configurable via `settings.ini` — no restart needed, use tray → **Reload config**
 - Zero dependencies, single executable
 
 ## Config
 
-Edit `config.ini` next to the exe:
+Edit `settings.ini` next to the exe:
 
 ```ini
-; Format: KEY = "description"
-F24 = "Turn ON Govee"
-Ctrl+Shift+K = "Open Kamkan"
+[Page1]
+Button1= CTRL+ALT+s = "Save Tcmd settings"
+Button2 = CTRL+ALT+d = "Backup tabsess"
+Button3 = F23 = "Turn on light"
+Button4 = F24 = "Turn off light"
+
+[Page2]
+Button1 = F15 = "Feature A"
+Button2 = F14 = "Feature B"
+Button3 = F22 = "Feature C"
+Button4 = F21 = "Feature D"
 
 ; Change the shortlist trigger (default: Ctrl+Shift+G)
 ; Shortlist_Trigger = Ctrl+Alt+H
@@ -33,7 +41,7 @@ Ctrl+Shift+K = "Open Kamkan"
 1. Run `minihotkey.exe` — appears in system tray
 2. Press any configured hotkey to see its description
 3. Press `Ctrl+Shift+G` to browse all shortcuts
-4. Right-click tray icon → **Reload config** after editing `config.ini`
+4. Right-click tray icon → **Reload config** after editing `settings.ini`
 
 ## Build
 
