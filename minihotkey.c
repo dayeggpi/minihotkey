@@ -19,12 +19,11 @@
 #define HOTKEY_LIST_ID    1999
 #define PILL_TIMER_ID     1
 #define PILL_TIMEOUT      2500
-#define ITEMS_PER_PAGE    10
 
 #define PILL_W_NORMAL     320
 #define PILL_H_NORMAL     68
 #define PILL_W_LIST       290
-#define PILL_H_LIST       390
+#define PILL_H_LIST       190
 #define PILL_MARGIN       24
 #define PILL_RADIUS       16
 
@@ -41,6 +40,8 @@ typedef struct {
     char description[256];
     UINT modifiers;
     UINT vk;
+    int  page_num;
+    int  button_num;
 } HotkeyEntry;
 
 // ---- Globals ----
@@ -160,13 +161,15 @@ static void ParseConfig(void) {
     char path[MAX_PATH];
     GetModuleFileNameA(NULL, path, MAX_PATH);
     char* slash = strrchr(path, '\\');
-    if (slash) strcpy(slash + 1, "config.ini");
-    else       strcpy(path, "config.ini");
+    if (slash) strcpy(slash + 1, "settings.ini");
+    else       strcpy(path, "settings.ini");
 
     FILE* f = fopen(path, "r");
     if (!f) return;
 
     char line[512];
+    int  cur_page = 0;
+
     while (fgets(line, sizeof(line), f)) {
         int len = (int)strlen(line);
         while (len > 0 && (line[len-1] == '\r' || line[len-1] == '\n')) line[--len] = '\0';
@@ -175,52 +178,93 @@ static void ParseConfig(void) {
         while (*p && isspace((unsigned char)*p)) p++;
         if (!*p || *p == ';' || *p == '#') continue;
 
+        // Section header [PageN]
+        if (*p == '[') {
+            char* close = strchr(p, ']');
+            if (!close) continue;
+            *close = '\0';
+            char sec[64] = {0};
+            strncpy(sec, p + 1, sizeof(sec) - 1);
+            str_trim(sec);
+            str_upper(sec);
+            cur_page = (strncmp(sec, "PAGE", 4) == 0) ? atoi(sec + 4) : 0;
+            continue;
+        }
+
         char* eq = strchr(p, '=');
         if (!eq) continue;
 
-        char key_str[64]  = {0};
-        char desc[256]    = {0};
-
-        int klen = (int)(eq - p);
-        if (klen >= (int)sizeof(key_str)) klen = sizeof(key_str) - 1;
-        strncpy(key_str, p, klen);
-        str_trim(key_str);
-
-        char* val = eq + 1;
-        while (*val && isspace((unsigned char)*val)) val++;
-        if (*val == '"') {
-            val++;
-            char* eq2 = strchr(val, '"');
-            if (eq2) *eq2 = '\0';
-        }
-        strncpy(desc, val, sizeof(desc) - 1);
-        str_trim(desc);
-
-        if (!key_str[0] || !desc[0]) continue;
-
-        char key_upper[64];
-        strncpy(key_upper, key_str, sizeof(key_upper) - 1);
-        key_upper[sizeof(key_upper) - 1] = '\0';
-        str_upper(key_upper);
-
-        if (strcmp(key_upper, "SHORTLIST_TRIGGER") == 0) {
-            UINT mods, vk;
-            if (ParseHotkeyString(desc, &mods, &vk)) {
-                g_list_trigger_mods = mods;
-                g_list_trigger_vk   = vk;
+        // Global options outside any section
+        if (cur_page == 0) {
+            char key_str[64] = {0};
+            int klen = (int)(eq - p);
+            if (klen >= (int)sizeof(key_str)) klen = sizeof(key_str) - 1;
+            strncpy(key_str, p, klen);
+            str_trim(key_str);
+            str_upper(key_str);
+            if (strcmp(key_str, "SHORTLIST_TRIGGER") == 0) {
+                char* val = eq + 1;
+                while (*val && isspace((unsigned char)*val)) val++;
+                if (*val == '"') { val++; char* q = strchr(val, '"'); if (q) *q = '\0'; }
+                str_trim(val);
+                UINT mods, vk;
+                if (ParseHotkeyString(val, &mods, &vk)) {
+                    g_list_trigger_mods = mods;
+                    g_list_trigger_vk   = vk;
+                }
             }
             continue;
         }
 
-        if (g_hotkey_count >= MAX_HOTKEYS) break;
+        // ButtonM = KEY = "desc"
+        char lhs[64] = {0};
+        int llen = (int)(eq - p);
+        if (llen >= (int)sizeof(lhs)) llen = sizeof(lhs) - 1;
+        strncpy(lhs, p, llen);
+        str_trim(lhs);
+        str_upper(lhs);
+
+        if (strncmp(lhs, "BUTTON", 6) != 0) continue;
+        int btn_num = atoi(lhs + 6);
+        if (btn_num < 1 || btn_num > 4) continue;
+
+        // rest after first '=' is "KEY = "desc""
+        char* rest = eq + 1;
+        while (*rest && isspace((unsigned char)*rest)) rest++;
+
+        char* eq2 = strchr(rest, '=');
+        if (!eq2) continue;
+
+        char hk_str[64] = {0};
+        int hlen = (int)(eq2 - rest);
+        if (hlen >= (int)sizeof(hk_str)) hlen = sizeof(hk_str) - 1;
+        strncpy(hk_str, rest, hlen);
+        str_trim(hk_str);
+
+        char* desc_part = eq2 + 1;
+        while (*desc_part && isspace((unsigned char)*desc_part)) desc_part++;
+        char desc[256] = {0};
+        if (*desc_part == '"') {
+            desc_part++;
+            char* q = strchr(desc_part, '"');
+            if (q) *q = '\0';
+        }
+        strncpy(desc, desc_part, sizeof(desc) - 1);
+        str_trim(desc);
+
+        if (!hk_str[0]) continue;
 
         UINT mods, vk;
-        if (!ParseHotkeyString(key_str, &mods, &vk)) continue;
+        if (!ParseHotkeyString(hk_str, &mods, &vk)) continue;
 
-        strncpy(g_hotkeys[g_hotkey_count].key_str,     key_str, 63);
-        strncpy(g_hotkeys[g_hotkey_count].description, desc,    255);
-        g_hotkeys[g_hotkey_count].modifiers = mods;
-        g_hotkeys[g_hotkey_count].vk        = vk;
+        if (g_hotkey_count >= MAX_HOTKEYS) break;
+
+        strncpy(g_hotkeys[g_hotkey_count].key_str,      hk_str, 63);
+        strncpy(g_hotkeys[g_hotkey_count].description,  desc,   255);
+        g_hotkeys[g_hotkey_count].modifiers  = mods;
+        g_hotkeys[g_hotkey_count].vk         = vk;
+        g_hotkeys[g_hotkey_count].page_num   = cur_page;
+        g_hotkeys[g_hotkey_count].button_num = btn_num;
         g_hotkey_count++;
     }
     fclose(f);
@@ -306,9 +350,14 @@ static void ShowListPill(void) {
         return;
     }
     KillTimer(g_main_wnd, PILL_TIMER_ID);
-    g_list_mode        = TRUE;
-    g_list_total_pages = (g_hotkey_count + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE;
-    if (g_list_total_pages < 1) g_list_total_pages = 1;
+    g_list_mode = TRUE;
+
+    int max_page = 0;
+    for (int i = 0; i < g_hotkey_count; i++) {
+        if (g_hotkeys[i].page_num > max_page)
+            max_page = g_hotkeys[i].page_num;
+    }
+    g_list_total_pages = max_page > 0 ? max_page : 1;
     if (g_list_page >= g_list_total_pages) g_list_page = 0;
 
     PositionPill(TRUE);
@@ -384,11 +433,13 @@ static void DrawListPill(HDC hdc, int w, int h) {
     int mx = 14;
     int y  = 12;
 
-    // Title
+    // Title: "Page1", "Page2", etc
+    char title[32];
+    snprintf(title, sizeof(title), "Page%d", g_list_page + 1);
     SelectObject(hdc, ft);
     SetTextColor(hdc, COL_TEXT);
     RECT tr = {mx, y, w - mx, y + 20};
-    DrawTextA(hdc, "Shortcuts", -1, &tr, DT_LEFT | DT_TOP | DT_SINGLELINE);
+    DrawTextA(hdc, title, -1, &tr, DT_LEFT | DT_TOP | DT_SINGLELINE);
     y += 24;
 
     // Separator
@@ -400,16 +451,22 @@ static void DrawListPill(HDC hdc, int w, int h) {
     DeleteObject(sp);
     y += 8;
 
-    // Items
-    int start = g_list_page * ITEMS_PER_PAGE;
-    int end   = start + ITEMS_PER_PAGE;
-    if (end > g_hotkey_count) end = g_hotkey_count;
+    // Items: button slots 4,3,2,1 for current page
+    int cur_page   = g_list_page + 1;
+    int items_drawn = 0;
+    for (int btn = 4; btn >= 1; btn--) {
+        HotkeyEntry* entry = NULL;
+        for (int i = 0; i < g_hotkey_count; i++) {
+            if (g_hotkeys[i].page_num == cur_page && g_hotkeys[i].button_num == btn) {
+                entry = &g_hotkeys[i];
+                break;
+            }
+        }
+        if (!entry) continue;
 
-    for (int i = start; i < end; i++) {
         SelectObject(hdc, fk);
         SIZE ks;
-        GetTextExtentPoint32A(hdc, g_hotkeys[i].key_str,
-                              (int)strlen(g_hotkeys[i].key_str), &ks);
+        GetTextExtentPoint32A(hdc, entry->key_str, (int)strlen(entry->key_str), &ks);
 
         int bw = ks.cx + 8;
         int ih = 24;
@@ -421,23 +478,24 @@ static void DrawListPill(HDC hdc, int w, int h) {
 
         SetTextColor(hdc, COL_ACCENT);
         TextOutA(hdc, mx + 4, y + (ih - ks.cy) / 2,
-                 g_hotkeys[i].key_str, (int)strlen(g_hotkeys[i].key_str));
+                 entry->key_str, (int)strlen(entry->key_str));
 
         SelectObject(hdc, fd);
         SetTextColor(hdc, COL_DIM);
         int dx = mx + bw + 8;
         RECT dr = {dx, y, w - mx, y + ih};
-        DrawTextA(hdc, g_hotkeys[i].description, -1, &dr,
+        DrawTextA(hdc, entry->description, -1, &dr,
                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
         y += ih + 3;
+        items_drawn++;
     }
 
-    if (g_hotkey_count == 0) {
+    if (items_drawn == 0) {
         SelectObject(hdc, fd);
         SetTextColor(hdc, COL_DIM);
         RECT er = {mx, y, w - mx, y + 30};
-        DrawTextA(hdc, "No shortcuts in config.ini", -1, &er,
+        DrawTextA(hdc, "No shortcuts in settings.ini", -1, &er,
                   DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     }
 
